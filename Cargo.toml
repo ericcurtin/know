@@ -1,0 +1,31 @@
+[package]
+name = "know"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "The 'Docker' for RAG - a CLI tool for your personal knowledge base"
+repository = "https://github.com/ecurtin/know"
+keywords = ["rag", "llm", "embeddings", "vector-database", "cli"]
+categories = ["command-line-utilities", "text-processing"]
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+clap = { version = "4.4", features = ["derive", "env"] }
+dirs = "5.0"
+futures = "0.3"
+glob = "0.3"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+text-splitter = "0.28"
+tokio = { version = "1.0", features = ["full"] }
+uuid = { version = "1.0", features = ["v4", "fast-rng"] }
+indicatif = "0.17"
+axum = "0.7"
+tower-http = { version = "0.6", features = ["cors"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
