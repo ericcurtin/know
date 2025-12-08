@@ -2,11 +2,12 @@
 
 The "Docker" for RAG - a CLI tool for your personal knowledge base.
 
-`know` makes it easy to ingest documents and query them using RAG (Retrieval-Augmented Generation). It uses docker-compose to manage Qdrant (vector database) and Docling (document parsing) services.
+`know` makes it easy to ingest documents and query them using RAG (Retrieval-Augmented Generation). Services start automatically when needed.
 
 ## Features
 
-- **Single binary CLI** - Simple verbs: `up`, `ingest`, `ask`, `serve`
+- **Single binary CLI** - Simple verbs: `run`, `ingest`, `serve`
+- **Auto-start services** - Qdrant and Docling start automatically when needed
 - **Docker Model Runner default** - Uses Docker's built-in model runner, falls back to Ollama, then OpenAI
 - **Document parsing with Docling** - Supports PDF, DOCX, PPTX, HTML, Markdown, and more
 - **Vector storage with Qdrant** - Production-ready vector database
@@ -16,14 +17,11 @@ The "Docker" for RAG - a CLI tool for your personal knowledge base.
 ## Quick Start
 
 ```bash
-# Start the services (Qdrant + Docling)
-know up
+# Ingest your documents (services start automatically)
+know ingest ./my-docs
 
-# Ingest your documents
-know ingest ./my-docs --extensions md,txt,pdf
-
-# Ask questions
-know ask "What is our refund policy?"
+# Query your knowledge base
+know run "What is our refund policy?"
 
 # Or serve as an API
 know serve --port 8080
@@ -44,34 +42,27 @@ cargo build --release
 
 - Docker (with Docker Compose)
 - One of the following LLM backends:
-  - Docker Model Runner (default): `docker model serve`
+  - Docker Model Runner (default): Enable in Docker Desktop settings
   - Ollama: `ollama serve`
   - OpenAI API key: `export OPENAI_API_KEY=sk-...`
 
 ## Commands
 
-### `know up`
+### `know run <question>`
 
-Start the Qdrant and Docling services via docker-compose.
-
-```bash
-know up
-```
-
-### `know down`
-
-Stop the services.
+Query your knowledge base. Services start automatically if not running.
 
 ```bash
-know down
+know run "What is the deployment process?"
+know run "How do I configure authentication?"
 ```
 
 ### `know ingest <path>`
 
-Ingest files from a directory into the knowledge base.
+Ingest files from a directory into the knowledge base. Services start automatically.
 
 ```bash
-# Ingest all markdown and text files
+# Ingest all supported files
 know ingest ./docs
 
 # Ingest specific file types
@@ -81,18 +72,9 @@ know ingest ./docs --extensions md,txt,pdf,docx,html
 know ingest ./docs --collection my-project
 ```
 
-### `know ask <question>`
-
-Ask a question against your knowledge base.
-
-```bash
-know ask "What is the deployment process?"
-know ask "How do I configure authentication?"
-```
-
 ### `know serve`
 
-Serve an OpenAI-compatible API endpoint.
+Serve an OpenAI-compatible API endpoint. Services start automatically.
 
 ```bash
 know serve --port 8080
@@ -120,7 +102,14 @@ Pull a shared knowledge base from Docker Hub.
 
 ```bash
 know pull myuser/company-docs:v1
-know up  # Start services to use it
+```
+
+### `know down`
+
+Stop the qdrant and docling services.
+
+```bash
+know down
 ```
 
 ### `know clean [collection]`
@@ -165,13 +154,13 @@ know status
 
 ```bash
 # Use a specific backend
-know --backend ollama ask "What is the refund policy?"
+know --backend ollama run "What is the refund policy?"
 
 # Use a custom model
-know --model llama3.2 --embed-model nomic-embed-text ask "What is the refund policy?"
+know --model llama3.2 --embed-model nomic-embed-text run "What is the refund policy?"
 
 # Use a custom endpoint (e.g., LocalAI, vLLM)
-know --backend openai --base-url http://localhost:8000/v1 ask "What is the refund policy?"
+know --backend openai --base-url http://localhost:8000/v1 run "What is the refund policy?"
 ```
 
 ## Architecture
@@ -193,7 +182,7 @@ know --backend openai --base-url http://localhost:8000/v1 ask "What is the refun
 
 ## Docker Compose Services
 
-The `docker-compose.yml` includes:
+The following services are managed automatically:
 
 - **Qdrant**: Vector database for storing embeddings
   - Port 6333 (HTTP API)

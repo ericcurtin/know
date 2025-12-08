@@ -90,14 +90,7 @@ fn chunk_text(text: &str) -> Vec<String> {
 
 /// Ingest documents from a path
 pub async fn ingest(cli: &Cli, path: &str, extensions: &str) -> Result<()> {
-    // Check if qdrant is available
     let qdrant = QdrantClient::new(Some(&cli.qdrant_url));
-    if !qdrant.is_available().await {
-        anyhow::bail!(
-            "Qdrant is not available at {}. Run 'know up' to start services.",
-            cli.qdrant_url
-        );
-    }
 
     // Create backend for embeddings
     let backend = create_backend(cli).await?;
@@ -228,16 +221,9 @@ pub async fn ingest(cli: &Cli, path: &str, extensions: &str) -> Result<()> {
     Ok(())
 }
 
-/// Ask a question against the knowledge base
-pub async fn ask(cli: &Cli, question: &str) -> Result<()> {
-    // Check if qdrant is available
+/// Query the knowledge base
+pub async fn run(cli: &Cli, question: &str) -> Result<()> {
     let qdrant = QdrantClient::new(Some(&cli.qdrant_url));
-    if !qdrant.is_available().await {
-        anyhow::bail!(
-            "Qdrant is not available at {}. Run 'know up' to start services.",
-            cli.qdrant_url
-        );
-    }
 
     // Check if collection has data
     let info = qdrant.collection_info(&cli.collection).await?;

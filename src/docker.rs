@@ -32,29 +32,51 @@ fn get_compose_file() -> Result<String> {
     Ok(compose_path.to_string_lossy().to_string())
 }
 
-/// Start qdrant and docling services
-pub async fn up() -> Result<()> {
+/// Check if qdrant is running and healthy
+async fn is_qdrant_ready() -> bool {
+    reqwest::get("http://localhost:6333/readyz")
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
+/// Ensure services are running, starting them if necessary
+pub async fn ensure_running() -> Result<()> {
+    // Quick check if qdrant is already running
+    if is_qdrant_ready().await {
+        return Ok(());
+    }
+
+    // Start services
     let compose_file = get_compose_file()?;
-    println!("Starting know services...");
+    eprintln!("Starting services...");
 
     let status = Command::new("docker")
         .args(["compose", "-f", &compose_file, "up", "-d"])
-        .stdout(Stdio::inherit())
+        .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .status()
         .await
-        .context("Failed to run docker compose")?;
+        .context("Failed to run docker compose. Is Docker running?")?;
 
     if !status.success() {
-        anyhow::bail!("docker compose up failed");
+        anyhow::bail!("Failed to start services. Run 'docker compose up' manually to see errors.");
     }
 
-    println!("\nServices started successfully!");
-    println!("  - Qdrant:  http://localhost:6333");
-    println!("  - Docling: http://localhost:5001");
-    println!("\nRun 'know status' to check service health.");
+    // Wait for qdrant to be ready (up to 30 seconds)
+    eprintln!("Waiting for services to be ready...");
+    for i in 0..30 {
+        if is_qdrant_ready().await {
+            eprintln!("Services ready.");
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if i == 10 {
+            eprintln!("Still waiting for qdrant...");
+        }
+    }
 
-    Ok(())
+    anyhow::bail!("Services started but qdrant not ready after 30s. Run 'know status' to check.")
 }
 
 /// Stop qdrant and docling services
@@ -92,7 +114,7 @@ pub async fn status() -> Result<()> {
         .context("Failed to run docker compose ps")?;
 
     if output.stdout.is_empty() {
-        println!("No services running. Run 'know up' to start services.");
+        println!("No services running. Services start automatically with 'know run' or 'know ingest'.");
     } else {
         print!("{}", String::from_utf8_lossy(&output.stdout));
     }

@@ -5,13 +5,13 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Parser)]
 #[command(name = "know")]
 #[command(version)]
-#[command(about = "The 'Ollama' for RAG - a CLI tool for your personal knowledge base")]
+#[command(about = "The 'Docker' for RAG - a CLI tool for your personal knowledge base")]
 #[command(long_about = r#"
 know - Your personal knowledge base CLI
 
 know makes it easy to ingest documents and query them using RAG
-(Retrieval-Augmented Generation). It uses docker-compose to manage
-qdrant (vector database) and docling (document parsing) services.
+(Retrieval-Augmented Generation). Services (qdrant, docling) start
+automatically when needed.
 
 Backend Priority (automatic fallback):
   1. Docker Model Runner (default, if available)
@@ -19,14 +19,11 @@ Backend Priority (automatic fallback):
   3. OpenAI-compatible API (if configured)
 
 Examples:
-  # Start the services
-  $ know up
+  # Ingest documents (services start automatically)
+  $ know ingest ./docs
 
-  # Ingest documents
-  $ know ingest ./docs --extensions md,txt,pdf
-
-  # Ask questions
-  $ know ask "What is the refund policy?"
+  # Query your knowledge base
+  $ know run "What is the refund policy?"
 
   # Push knowledge base to Docker Hub
   $ know push myuser/company-docs:v1
@@ -69,13 +66,13 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Start qdrant and docling services via docker-compose
-    Up,
+    /// Query your knowledge base (services start automatically)
+    Run {
+        /// The question you want to ask
+        query: Vec<String>,
+    },
 
-    /// Stop qdrant and docling services
-    Down,
-
-    /// Ingest files from a directory into the knowledge base
+    /// Ingest files into the knowledge base (services start automatically)
     Ingest {
         /// The path to the directory or file to ingest
         path: String,
@@ -85,18 +82,15 @@ pub enum Commands {
         extensions: String,
     },
 
-    /// Ask a question based on your knowledge base
-    Ask {
-        /// The question you want to ask
-        query: Vec<String>,
-    },
-
-    /// Serve an OpenAI-compatible API endpoint
+    /// Serve an OpenAI-compatible API endpoint (services start automatically)
     Serve {
         /// Port to serve on
         #[arg(short, long, default_value = "8080")]
         port: u16,
     },
+
+    /// Stop qdrant and docling services
+    Down,
 
     /// Clear the knowledge base (or a specific collection)
     Clean {
