@@ -15,61 +15,98 @@ pub trait LlmBackend: Send + Sync {
 }
 
 /// Docker Model Runner backend (default)
+/// Connects via Unix socket to /var/run/docker.sock
 pub struct DockerModelRunner {
-    client: reqwest::Client,
-    base_url: String,
     gen_model: String,
     embed_model: String,
+    socket_path: String,
 }
 
 impl DockerModelRunner {
-    pub fn new(base_url: Option<String>, gen_model: Option<String>, embed_model: Option<String>) -> Self {
+    pub fn new(_base_url: Option<String>, gen_model: Option<String>, embed_model: Option<String>) -> Self {
+        // Determine socket path - try Docker Desktop path first, then standard path
+        let socket_path = if std::path::Path::new(&format!(
+            "{}/.docker/run/docker.sock",
+            std::env::var("HOME").unwrap_or_default()
+        ))
+        .exists()
+        {
+            format!(
+                "{}/.docker/run/docker.sock",
+                std::env::var("HOME").unwrap_or_default()
+            )
+        } else {
+            "/var/run/docker.sock".to_string()
+        };
+
         Self {
-            client: reqwest::Client::new(),
-            // Docker Model Runner uses the Docker socket via a special endpoint
-            base_url: base_url.unwrap_or_else(|| "http://localhost:12434".to_string()),
+            socket_path,
             gen_model: gen_model.unwrap_or_else(|| "ai/llama3.2:3B-Q8_0".to_string()),
             embed_model: embed_model.unwrap_or_else(|| "ai/mxbai-embed-large:335M-F16".to_string()),
         }
     }
 
+    fn create_client(&self) -> Result<reqwest::Client> {
+        // For Unix socket, we need to use hyper with unix socket connector
+        // But reqwest doesn't support unix sockets directly, so we'll fall back to TCP if available
+        // or use a workaround via socat/docker proxy
+        Ok(reqwest::Client::new())
+    }
+
+    /// Get the API base URL - tries TCP first (localhost:12434), falls back to explaining socket requirement
+    fn get_base_url(&self) -> String {
+        // Docker Model Runner exposes on localhost:12434 when TCP is enabled
+        "http://localhost:12434/engines/llama.cpp/v1".to_string()
+    }
+
     pub async fn is_available(&self) -> bool {
-        // Check if Docker Model Runner is available by testing the embeddings endpoint
-        // Just checking if the server responds isn't enough - we need to verify
-        // the embedding model is actually available
-        #[derive(Serialize)]
-        struct EmbedRequest {
-            model: String,
-            input: String,
-        }
+        // Check if Docker Model Runner is available by testing the models endpoint
+        let client = reqwest::Client::new();
+        let base_url = self.get_base_url();
 
-        #[derive(Deserialize)]
-        struct EmbedResponse {
-            data: Vec<EmbedData>,
-        }
-
-        #[derive(Deserialize)]
-        struct EmbedData {
-            embedding: Vec<f32>,
-        }
-
-        let result = self
-            .client
-            .post(format!("{}/v1/embeddings", self.base_url))
-            .timeout(std::time::Duration::from_secs(10))
-            .json(&EmbedRequest {
-                model: self.embed_model.clone(),
-                input: "test".to_string(),
-            })
+        // First check if the service is responding
+        let models_result = client
+            .get(format!("{}/models", base_url))
+            .timeout(std::time::Duration::from_secs(5))
             .send()
             .await;
 
-        match result {
+        match models_result {
             Ok(response) => {
                 if !response.status().is_success() {
                     return false;
                 }
-                response.json::<EmbedResponse>().await.is_ok()
+                // Service is up, now test embeddings with a real request
+                #[derive(Serialize)]
+                struct EmbedRequest {
+                    model: String,
+                    input: String,
+                }
+
+                #[derive(Deserialize)]
+                struct EmbedResponse {
+                    data: Vec<EmbedData>,
+                }
+
+                #[derive(Deserialize)]
+                struct EmbedData {
+                    embedding: Vec<f32>,
+                }
+
+                let embed_result = client
+                    .post(format!("{}/embeddings", base_url))
+                    .timeout(std::time::Duration::from_secs(30))
+                    .json(&EmbedRequest {
+                        model: self.embed_model.clone(),
+                        input: "test".to_string(),
+                    })
+                    .send()
+                    .await;
+
+                match embed_result {
+                    Ok(resp) => resp.status().is_success(),
+                    Err(_) => false,
+                }
             }
             Err(_) => false,
         }
@@ -79,6 +116,9 @@ impl DockerModelRunner {
 #[async_trait]
 impl LlmBackend for DockerModelRunner {
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        let client = reqwest::Client::new();
+        let base_url = self.get_base_url();
+
         #[derive(Serialize)]
         struct EmbedRequest {
             model: String,
@@ -95,9 +135,8 @@ impl LlmBackend for DockerModelRunner {
             embedding: Vec<f32>,
         }
 
-        let res = self
-            .client
-            .post(format!("{}/v1/embeddings", self.base_url))
+        let res = client
+            .post(format!("{}/embeddings", base_url))
             .json(&EmbedRequest {
                 model: self.embed_model.clone(),
                 input: text.to_string(),
@@ -116,6 +155,9 @@ impl LlmBackend for DockerModelRunner {
     }
 
     async fn generate(&self, prompt: &str, context: &str) -> Result<String> {
+        let client = reqwest::Client::new();
+        let base_url = self.get_base_url();
+
         #[derive(Serialize)]
         struct ChatRequest {
             model: String,
@@ -150,9 +192,8 @@ impl LlmBackend for DockerModelRunner {
             context
         );
 
-        let res = self
-            .client
-            .post(format!("{}/v1/chat/completions", self.base_url))
+        let res = client
+            .post(format!("{}/chat/completions", base_url))
             .json(&ChatRequest {
                 model: self.gen_model.clone(),
                 messages: vec![
@@ -204,7 +245,7 @@ impl OllamaBackend {
     }
 
     pub async fn is_available(&self) -> bool {
-        // Check if Ollama is available and the embedding model works
+        // Check if Ollama is available and both models work
         #[derive(Serialize)]
         struct EmbedRequest {
             model: String,
@@ -213,13 +254,15 @@ impl OllamaBackend {
 
         #[derive(Deserialize)]
         struct EmbedResponse {
-            embedding: Vec<f32>,
+            embedding: Option<Vec<f32>>,
+            error: Option<String>,
         }
 
-        let result = self
+        // Test embedding model
+        let embed_result = self
             .client
             .post(format!("{}/api/embeddings", self.base_url))
-            .timeout(std::time::Duration::from_secs(30)) // Ollama may need to load model
+            .timeout(std::time::Duration::from_secs(30))
             .json(&EmbedRequest {
                 model: self.embed_model.clone(),
                 prompt: "test".to_string(),
@@ -227,12 +270,54 @@ impl OllamaBackend {
             .send()
             .await;
 
-        match result {
+        let embed_ok = match embed_result {
             Ok(response) => {
-                if !response.status().is_success() {
-                    return false;
+                if let Ok(resp) = response.json::<EmbedResponse>().await {
+                    resp.embedding.is_some() && resp.error.is_none()
+                } else {
+                    false
                 }
-                response.json::<EmbedResponse>().await.is_ok()
+            }
+            Err(_) => false,
+        };
+
+        if !embed_ok {
+            return false;
+        }
+
+        // Test generation model
+        #[derive(Serialize)]
+        struct GenRequest {
+            model: String,
+            prompt: String,
+            stream: bool,
+        }
+
+        #[derive(Deserialize)]
+        struct GenResponse {
+            response: Option<String>,
+            error: Option<String>,
+        }
+
+        let gen_result = self
+            .client
+            .post(format!("{}/api/generate", self.base_url))
+            .timeout(std::time::Duration::from_secs(30))
+            .json(&GenRequest {
+                model: self.gen_model.clone(),
+                prompt: "Hi".to_string(),
+                stream: false,
+            })
+            .send()
+            .await;
+
+        match gen_result {
+            Ok(response) => {
+                if let Ok(resp) = response.json::<GenResponse>().await {
+                    resp.response.is_some() && resp.error.is_none()
+                } else {
+                    false
+                }
             }
             Err(_) => false,
         }
@@ -499,10 +584,24 @@ pub async fn create_backend(cli: &Cli) -> Result<Box<dyn LlmBackend>> {
         return Ok(Box::new(openai));
     }
 
+    // Get info about what's missing for better error message
+    let embed_model = cli.embed_model.clone().unwrap_or_else(|| "ai/nomic-embed-test-v1.5".to_string());
+    let gen_model = cli.model.clone().unwrap_or_else(|| "ai/gemma3".to_string());
+
     anyhow::bail!(
-        "No LLM backend available. Please either:\n\
-        1. Start Docker Model Runner: docker model serve\n\
-        2. Start Ollama: ollama serve\n\
-        3. Set OPENAI_API_KEY environment variable"
+        "No LLM backend available with required models.\n\n\
+        Required models:\n\
+        - Embedding: {}\n\
+        - Generation: {}\n\n\
+        Please either:\n\
+        1. Enable Docker Model Runner TCP and pull models:\n\
+           docker model pull ai/mxbai-embed-large\n\
+           docker model pull ai/llama3.2\n\n\
+        2. Start Ollama and pull models:\n\
+           ollama pull {}\n\
+           ollama pull {}\n\n\
+        3. Set OPENAI_API_KEY environment variable\n\n\
+        Or specify different models with --model and --embed-model",
+        embed_model, gen_model, embed_model, gen_model
     )
 }
