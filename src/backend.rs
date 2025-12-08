@@ -41,8 +41,8 @@ impl DockerModelRunner {
 
         Self {
             socket_path,
-            gen_model: gen_model.unwrap_or_else(|| "ai/llama3.2:3B-Q8_0".to_string()),
-            embed_model: embed_model.unwrap_or_else(|| "ai/mxbai-embed-large:335M-F16".to_string()),
+            gen_model: gen_model.unwrap_or_else(|| "ai/gemma3".to_string()),
+            embed_model: embed_model.unwrap_or_else(|| "ai/nomic-embed-test-v1.5".to_string()),
         }
     }
 
@@ -595,8 +595,8 @@ pub async fn create_backend(cli: &Cli) -> Result<Box<dyn LlmBackend>> {
         - Generation: {}\n\n\
         Please either:\n\
         1. Enable Docker Model Runner TCP and pull models:\n\
-           docker model pull ai/mxbai-embed-large\n\
-           docker model pull ai/llama3.2\n\n\
+           docker model pull ai/nomic-embed-test-v1.5\n\
+           docker model pull ai/gemma3\n\n\
         2. Start Ollama and pull models:\n\
            ollama pull {}\n\
            ollama pull {}\n\n\
