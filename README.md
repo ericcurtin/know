@@ -8,7 +8,7 @@ The "Docker" for RAG - a CLI tool for your personal knowledge base.
 
 - **Single binary CLI** - Simple verbs: `run`, `ingest`, `serve`
 - **Auto-start services** - Qdrant and Docling start automatically when needed
-- **Docker Model Runner default** - Uses Docker's built-in model runner, falls back to Ollama, then OpenAI
+- **Docker Model Runner default** - Uses Docker's built-in model runner
 - **Document parsing with Docling** - Supports PDF, DOCX, PPTX, HTML, Markdown, and more
 - **Vector storage with Qdrant** - Production-ready vector database
 - **Push/Pull knowledge bases** - Share your indexed documents via Docker Hub
@@ -43,7 +43,6 @@ cargo build --release
 - Docker (with Docker Compose)
 - One of the following LLM backends:
   - Docker Model Runner (default): Enable in Docker Desktop settings
-  - Ollama: `ollama serve`
   - OpenAI API key: `export OPENAI_API_KEY=sk-...`
 
 ## Commands
@@ -134,14 +133,13 @@ know status
 `know` automatically detects available backends in this order:
 
 1. **Docker Model Runner** (default) - Uses Docker's built-in AI model runner
-2. **Ollama** - Falls back if Docker Model Runner is not available
 3. **OpenAI** - Falls back if neither is available and `OPENAI_API_KEY` is set
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `KNOW_BACKEND` | Force a specific backend (`docker`, `ollama`, `openai`) | auto-detect |
+| `KNOW_BACKEND` | Force a specific backend (`docker`, `openai`) | auto-detect |
 | `KNOW_BASE_URL` | Base URL for the LLM backend | varies by backend |
 | `KNOW_MODEL` | Model name for text generation | varies by backend |
 | `KNOW_EMBED_MODEL` | Model name for embeddings | varies by backend |
@@ -154,10 +152,7 @@ know status
 
 ```bash
 # Use a specific backend
-know --backend ollama run "What is the refund policy?"
-
-# Use a custom model
-know --model llama3.2 --embed-model nomic-embed-text run "What is the refund policy?"
+know --backend docker run "What is the refund policy?"
 
 # Use a custom endpoint (e.g., LocalAI, vLLM)
 know --backend openai --base-url http://localhost:8000/v1 run "What is the refund policy?"
@@ -172,12 +167,12 @@ know --backend openai --base-url http://localhost:8000/v1 run "What is the refun
 └─────────────┘     └─────────────┘     └─────────────┘
        │
        ▼
-┌─────────────────────────────────────────────────────┐
-│              LLM Backend (auto-detected)            │
-├─────────────┬─────────────┬─────────────────────────┤
-│   Docker    │   Ollama    │   OpenAI-compatible     │
-│ Model Runner│             │      endpoint           │
-└─────────────┴─────────────┴─────────────────────────┘
+┌──────────────────────────────────────────┐
+│       LLM Backend (auto-detected)        │
+├──────────────────┬───────────────────────┤
+│      Docker      │   OpenAI-compatible   │
+│   Model Runner   │       endpoint        │
+└──────────────────┴───────────────────────┘
 ```
 
 ## Docker Compose Services
