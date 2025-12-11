@@ -42,7 +42,7 @@ impl DockerModelRunner {
         Self {
             socket_path,
             gen_model: gen_model.unwrap_or_else(|| "ai/gemma3".to_string()),
-            embed_model: embed_model.unwrap_or_else(|| "ai/nomic-embed-test-v1.5".to_string()),
+            embed_model: embed_model.unwrap_or_else(|| "ai/nomic-embed-text-v1.5".to_string()),
         }
     }
 
@@ -585,7 +585,7 @@ pub async fn create_backend(cli: &Cli) -> Result<Box<dyn LlmBackend>> {
     }
 
     // Get info about what's missing for better error message
-    let embed_model = cli.embed_model.clone().unwrap_or_else(|| "ai/nomic-embed-test-v1.5".to_string());
+    let embed_model = cli.embed_model.clone().unwrap_or_else(|| "ai/nomic-embed-text-v1.5".to_string());
     let gen_model = cli.model.clone().unwrap_or_else(|| "ai/gemma3".to_string());
 
     anyhow::bail!(
@@ -595,7 +595,7 @@ pub async fn create_backend(cli: &Cli) -> Result<Box<dyn LlmBackend>> {
         - Generation: {}\n\n\
         Please either:\n\
         1. Enable Docker Model Runner TCP and pull models:\n\
-           docker model pull ai/nomic-embed-test-v1.5\n\
+           docker model pull ai/nomic-embed-text-v1.5\n\
            docker model pull ai/gemma3\n\n\
         2. Start Ollama and pull models:\n\
            ollama pull {}\n\
